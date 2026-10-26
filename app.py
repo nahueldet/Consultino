@@ -1,8 +1,8 @@
+import streamlit as st
 import requests
 import statistics
 
 def tasar_producto_usado(query):
-    # API pública de MercadoLibre para Argentina (MLA), filtrando por "usado"
     url = f"https://api.mercadolibre.com/sites/MLA/search?q={query}&condition=used&limit=50"
     
     try:
@@ -10,43 +10,62 @@ def tasar_producto_usado(query):
         respuesta.raise_for_status()
         datos = respuesta.json()
     except requests.exceptions.RequestException as e:
-        return f"Error en la conexión: {e}"
+        return {"error": f"Error de conexión con el mercado: {e}"}
 
     resultados = datos.get("results", [])
     
     if not resultados:
-        return "No se encontraron publicaciones para este producto."
+        return {"error": "No se encontraron publicaciones de este producto usado."}
 
-    # Extraer todos los precios
-    precios = [item["price"] for item in resultados]
-    
-    # Ordenar precios para eliminar valores atípicos (descartamos el 15% inferior y superior)
+    precios = [item["price"] for item in resultados if item.get("price")]
+    if not precios:
+        return {"error": "No se pudieron extraer los precios."}
+        
     precios.sort()
     corte = int(len(precios) * 0.15) 
     precios_limpios = precios[corte:-corte] if corte > 0 else precios
 
-    # Cálculos estadísticos
-    precio_min = min(precios_limpios)
-    precio_max = max(precios_limpios)
-    precio_promedio = statistics.mean(precios_limpios)
-    precio_mediana = statistics.median(precios_limpios) # La mediana es el valor más realista
-
     return {
         "producto": query,
-        "muestra_analizada": len(precios_limpios),
-        "precio_minimo": round(precio_min, 2),
-        "precio_maximo": round(precio_max, 2),
-        "precio_promedio": round(precio_promedio, 2),
-        "precio_sugerido": round(precio_mediana, 2) 
+        "muestra": len(precios_limpios),
+        "minimo": min(precios_limpios),
+        "maximo": max(precios_limpios),
+        "promedio": statistics.mean(precios_limpios),
+        "sugerido": statistics.median(precios_limpios)
     }
 
-# Prueba del script
-busqueda = "iPhone 13 128gb"
-resultado = tasar_producto_usado(busqueda)
+# Configuración de la página
+st.set_page_config(page_title="Tasador Inteligente", page_icon="🔍", layout="centered")
 
-print(f"--- Tasación de {resultado['producto']} (Usado) ---")
-print(f"Muestra analizada: {resultado['muestra_analizada']} publicaciones")
-print(f"Precio Mínimo: ${resultado['precio_minimo']:,.2f}")
-print(f"Precio Máximo: ${resultado['precio_maximo']:,.2f}")
-print(f"Precio Promedio: ${resultado['precio_promedio']:,.2f}")
-print(f"Valor Sugerido de Venta: ${resultado['precio_sugerido']:,.2f}")
+st.title("🔍 Tasador Inteligente de Mercado")
+st.markdown("Descubrí a qué precio vender o comprar un artículo usado en Argentina basándote en publicaciones reales.")
+
+# Entrada del usuario
+producto = st.text_input("¿Qué producto querés tasar?", placeholder="Ej. iPhone 13 128gb")
+
+if st.button("Calcular Precio Real", type="primary"):
+    if producto:
+        with st.spinner("Analizando el mercado en tiempo real..."):
+            resultado = tasar_producto_usado(producto)
+            
+            # Manejo de errores limpio dentro de Streamlit
+            if "error" in resultado:
+                st.error(resultado["error"])
+            else:
+                st.success(f"Análisis basado en **{resultado['muestra']}** publicaciones verificadas.")
+                
+                # Diseño de tarjetas (métricas)
+                st.header(f"Valor sugerido: ${resultado['sugerido']:,.0f}")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric(label="Mínimo de mercado", value=f"${resultado['minimo']:,.0f}")
+                with col2:
+                    st.metric(label="Promedio", value=f"${resultado['promedio']:,.0f}")
+                with col3:
+                    st.metric(label="Máximo de mercado", value=f"${resultado['maximo']:,.0f}")
+                    
+                st.info("💡 **Dato:** El valor sugerido utiliza la mediana estadística para ignorar accesorios baratos camuflados o precios irreales.")
+    else:
+        st.warning("Por favor, escribí el nombre de un producto para comenzar.")
