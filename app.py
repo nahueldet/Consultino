@@ -5,8 +5,14 @@ import statistics
 def tasar_producto_usado(query):
     url = f"https://api.mercadolibre.com/sites/MLA/search?q={query}&condition=used&limit=50"
     
+    # Agregamos headers para simular un navegador real y evitar el bloqueo 403
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json"
+    }
+    
     try:
-        respuesta = requests.get(url)
+        respuesta = requests.get(url, headers=headers)
         respuesta.raise_for_status()
         datos = respuesta.json()
     except requests.exceptions.RequestException as e:
